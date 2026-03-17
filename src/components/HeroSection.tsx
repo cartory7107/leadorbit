@@ -22,6 +22,15 @@ const HeroSection = ({ onStart }: HeroSectionProps) => {
 
       <div className="relative z-10 max-w-3xl mx-auto text-center">
         <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="mb-6"
+        >
+          <img src={logoImage} alt="Cartory Lead Orbit" className="w-24 h-24 mx-auto drop-shadow-[0_0_30px_rgba(0,163,255,0.4)]" />
+        </motion.div>
+
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
