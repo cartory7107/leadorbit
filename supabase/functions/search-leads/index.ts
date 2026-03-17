@@ -41,13 +41,13 @@ interface Lead {
 async function searchFoursquare(businessType: string, location: string, apiKey: string, limit: number): Promise<FoursquarePlace[]> {
   const query = encodeURIComponent(businessType);
   const near = encodeURIComponent(location);
-  const url = `https://api.foursquare.com/v3/places/search?query=${query}&near=${near}&limit=${Math.min(limit, 50)}&sort=RELEVANCE`;
+  const url = `https://places-api.foursquare.com/places/search?query=${query}&near=${near}&limit=${Math.min(limit, 50)}&sort=RELEVANCE`;
 
   console.log('Foursquare URL:', url);
 
   const response = await fetch(url, {
     headers: {
-      'Authorization': apiKey.startsWith('fsq') ? apiKey : `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',
     },
   });
