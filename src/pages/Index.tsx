@@ -9,15 +9,6 @@ import OutreachPanel from "@/components/OutreachPanel";
 import { generateLeads, leadsToCSV, type Lead } from "@/lib/leadGenerator";
 import { useToast } from "@/hooks/use-toast";
 import logoImage from "@/assets/og-image.png";
-import { motion, AnimatePresence } from "framer-motion";
-import { Download, Lock, Copy, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import HeroSection from "@/components/HeroSection";
-import LeadSearch from "@/components/LeadSearch";
-import LeadCard from "@/components/LeadCard";
-import OutreachPanel from "@/components/OutreachPanel";
-import { generateLeads, leadsToCSV, type Lead } from "@/lib/leadGenerator";
-import { useToast } from "@/hooks/use-toast";
 
 const FREE_LIMIT = 10;
 const TOTAL_LEADS = 30;
