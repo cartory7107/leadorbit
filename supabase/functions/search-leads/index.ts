@@ -172,28 +172,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    const googleKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
     const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
 
-    if (!googleKey && !firecrawlKey) {
+    if (!firecrawlKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'No data sources configured. Please add Google Places API key or connect Firecrawl.' }),
+        JSON.stringify({ success: false, error: 'Firecrawl connector not configured.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log(`Searching: "${businessType}" in "${location}" (limit: ${limit})`);
 
-    // Run both sources in parallel
-    const [googleLeads, firecrawlLeads] = await Promise.all([
-      googleKey ? searchGoogleMaps(businessType, location, googleKey) : Promise.resolve([]),
-      firecrawlKey ? searchFirecrawl(businessType, location, firecrawlKey, limit) : Promise.resolve([]),
-    ]);
+    const firecrawlLeads = await searchFirecrawl(businessType, location, firecrawlKey, limit);
 
-    console.log(`Google Maps: ${googleLeads.length}, Firecrawl: ${firecrawlLeads.length}`);
+    console.log(`Firecrawl: ${firecrawlLeads.length}`);
 
-    // Combine and deduplicate
-    const allLeads = deduplicateLeads([...googleLeads, ...firecrawlLeads]);
+    const allLeads = deduplicateLeads(firecrawlLeads);
 
     // Limit results
     const limitedLeads = allLeads.slice(0, limit);
