@@ -52,66 +52,6 @@ function normalizeName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// ── Google Maps Places API (Text Search) ──
-
-async function searchGoogleMaps(businessType: string, location: string, apiKey: string): Promise<Lead[]> {
-  const query = `${businessType} in ${location}`;
-  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
-
-  const response = await fetch(url);
-  const data = await response.json();
-
-  if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-    console.error('Google Maps error:', data.status, data.error_message);
-    return [];
-  }
-
-  const leads: Lead[] = [];
-  for (const place of (data.results || [])) {
-    // Get place details for website, phone
-    let website: string | null = null;
-    let phone: string | null = null;
-
-    try {
-      const detailUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=website,formatted_phone_number,opening_hours&key=${apiKey}`;
-      const detailRes = await fetch(detailUrl);
-      const detailData = await detailRes.json();
-      if (detailData.result) {
-        website = detailData.result.website || null;
-        phone = detailData.result.formatted_phone_number || null;
-      }
-    } catch (e) {
-      console.warn('Detail fetch failed for', place.name);
-    }
-
-    const insight = !website
-      ? 'No website found — needs online presence'
-      : place.rating && place.rating < 4
-      ? `Low rating (${place.rating}) — could benefit from reputation management`
-      : place.user_ratings_total && place.user_ratings_total < 20
-      ? 'Few online reviews — needs visibility boost'
-      : `Active business that could benefit from enhanced digital marketing`;
-
-    leads.push({
-      id: `gm-${leads.length}-${Date.now()}`,
-      businessName: place.name,
-      industry: businessType,
-      website,
-      address: place.formatted_address || null,
-      socialMedia: {},
-      reason: insight,
-      location,
-      phone,
-      email: null,
-      description: place.formatted_address || null,
-      enriched: false,
-      source: 'google_maps',
-    });
-  }
-
-  return leads;
-}
-
 // ── Firecrawl Web Search ──
 
 async function searchFirecrawl(businessType: string, location: string, apiKey: string, limit: number): Promise<Lead[]> {
@@ -232,28 +172,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    const googleKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
     const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
 
-    if (!googleKey && !firecrawlKey) {
+    if (!firecrawlKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'No data sources configured. Please add Google Places API key or connect Firecrawl.' }),
+        JSON.stringify({ success: false, error: 'Firecrawl connector not configured.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log(`Searching: "${businessType}" in "${location}" (limit: ${limit})`);
 
-    // Run both sources in parallel
-    const [googleLeads, firecrawlLeads] = await Promise.all([
-      googleKey ? searchGoogleMaps(businessType, location, googleKey) : Promise.resolve([]),
-      firecrawlKey ? searchFirecrawl(businessType, location, firecrawlKey, limit) : Promise.resolve([]),
-    ]);
+    const firecrawlLeads = await searchFirecrawl(businessType, location, firecrawlKey, limit);
 
-    console.log(`Google Maps: ${googleLeads.length}, Firecrawl: ${firecrawlLeads.length}`);
+    console.log(`Firecrawl: ${firecrawlLeads.length}`);
 
-    // Combine and deduplicate
-    const allLeads = deduplicateLeads([...googleLeads, ...firecrawlLeads]);
+    const allLeads = deduplicateLeads(firecrawlLeads);
 
     // Limit results
     const limitedLeads = allLeads.slice(0, limit);
