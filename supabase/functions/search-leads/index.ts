@@ -49,6 +49,7 @@ async function searchFoursquare(businessType: string, location: string, apiKey: 
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',
+      'Foursquare-Version': '2024-01-01',
     },
   });
 
