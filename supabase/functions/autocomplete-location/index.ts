@@ -67,14 +67,11 @@ serve(async (req) => {
       .filter((r: any) => r.type === "geo" && r.geo)
       .map((r: any) => {
         const geo = r.geo;
-        const name = geo.name || "";
-        const country = geo.country || "";
-        const region = geo.state || geo.region || "";
+        const name = geo.name || r.text?.primary || "";
         return {
-          label: country ? `${name} — ${country}` : name,
-          city: name,
-          country,
-          region,
+          label: name,
+          city: name.split(",")[0]?.trim() || name,
+          country: name.split(",").slice(1).join(",").trim() || "",
         };
       })
       .slice(0, 10);
