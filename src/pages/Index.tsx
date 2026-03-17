@@ -78,10 +78,8 @@ const Index = () => {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-secondary">
         <div className="container flex items-center justify-between h-14">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-primary flex items-center justify-center">
-              <span className="text-sm font-bold text-primary-foreground">C</span>
-            </div>
+          <div className="flex items-center gap-2.5">
+            <img src={logoImage} alt="Cartory Lead Orbit" className="w-8 h-8 rounded-lg object-contain" />
             <span className="font-semibold text-foreground text-sm">Cartory Lead Orbit</span>
           </div>
           <div className="micro-label">AI Lead Hunter</div>
