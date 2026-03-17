@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
       else reason = 'Active business with web presence — good outreach candidate';
 
       return {
-        id: `fsq-${place.fsq_id}`,
+        id: `fsq-${place.fsq_place_id || Date.now()}`,
         businessName: place.name,
         category,
         address: place.location?.formatted_address || place.location?.address || null,
