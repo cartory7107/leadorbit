@@ -16,7 +16,15 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const query = url.searchParams.get("query")?.trim();
+    let query = url.searchParams.get("query")?.trim();
+
+    // Also support POST body
+    if (!query && req.method === "POST") {
+      try {
+        const body = await req.json();
+        query = body.query?.trim();
+      } catch {}
+    }
 
     if (!query || query.length < 2) {
       return new Response(JSON.stringify([]), {
