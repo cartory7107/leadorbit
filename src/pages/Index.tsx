@@ -116,7 +116,7 @@ const Index = () => {
             <img src={logoImage} alt="Cartory Lead Orbit" className="w-8 h-8 rounded-lg object-contain" />
             <span className="font-semibold text-foreground text-sm">Cartory Lead Orbit</span>
           </div>
-          <div className="micro-label">AI Lead Hunter</div>
+          <div className="micro-label">part of cartory (GOC)</div>
         </div>
       </header>
 
