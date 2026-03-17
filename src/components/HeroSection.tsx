@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import logoImage from "@/assets/logo.png";
 
 interface HeroSectionProps {
   onStart: () => void;
