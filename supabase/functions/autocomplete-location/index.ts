@@ -49,7 +49,7 @@ serve(async (req) => {
 
     const response = await fetch(fsqUrl, {
       headers: {
-        Authorization: apiKey,
+        Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
     });
