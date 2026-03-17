@@ -35,15 +35,34 @@ interface Lead {
   reason: string;
 }
 
-// ── Foursquare Places Search ──
+// ── In-memory cache (10 min TTL) ──
+const cache = new Map<string, { data: any; ts: number }>();
+const CACHE_TTL = 10 * 60 * 1000;
 
+function getCached(key: string) {
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.ts < CACHE_TTL) return entry.data;
+  cache.delete(key);
+  return null;
+}
+
+function setCache(key: string, data: any) {
+  cache.set(key, { data, ts: Date.now() });
+  // Prune old entries
+  if (cache.size > 100) {
+    const now = Date.now();
+    for (const [k, v] of cache) {
+      if (now - v.ts > CACHE_TTL) cache.delete(k);
+    }
+  }
+}
+
+// ── Foursquare Places Search ──
 async function searchFoursquare(businessType: string, location: string, apiKey: string, limit: number): Promise<FoursquarePlace[]> {
   const query = encodeURIComponent(businessType);
   const near = encodeURIComponent(location);
   const fields = 'fsq_place_id,name,location,categories,website,tel,email';
   const url = `https://places-api.foursquare.com/places/search?query=${query}&near=${near}&limit=${Math.min(limit, 50)}&sort=RELEVANCE&fields=${fields}`;
-
-  console.log('Foursquare URL:', url);
 
   const response = await fetch(url, {
     headers: {
@@ -58,15 +77,14 @@ async function searchFoursquare(businessType: string, location: string, apiKey: 
     console.error('Foursquare error:', JSON.stringify(data));
     return [];
   }
-
-  console.log('Foursquare raw response keys:', Object.keys(data));
   return data.results || [];
 }
 
-// ── Firecrawl Website Discovery ──
-
+// ── Firecrawl Website Discovery (with timeout) ──
 async function discoverWebsite(businessName: string, city: string, firecrawlKey: string): Promise<{ website: string | null; email: string | null; socialMedia: Record<string, string> }> {
   const query = `"${businessName}" "${city}" official website`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
     const response = await fetch('https://api.firecrawl.dev/v1/search', {
@@ -75,12 +93,10 @@ async function discoverWebsite(businessName: string, city: string, firecrawlKey:
         'Authorization': `Bearer ${firecrawlKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        query,
-        limit: 3,
-        scrapeOptions: { formats: ['markdown'] },
-      }),
+      body: JSON.stringify({ query, limit: 3, scrapeOptions: { formats: ['markdown'] } }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     const data = await response.json();
     if (!response.ok || !data.data?.length) return { website: null, email: null, socialMedia: {} };
@@ -91,38 +107,32 @@ async function discoverWebsite(businessName: string, city: string, firecrawlKey:
       const url = (result.url || '').toLowerCase();
       if (skipDomains.some(d => url.includes(d))) continue;
 
-      // Validate business name similarity
       const resultTitle = (result.title || '').toLowerCase();
       const nameLower = businessName.toLowerCase();
-      const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
-      const matchCount = nameWords.filter(w => resultTitle.includes(w)).length;
-
+      const nameWords = nameLower.split(/\s+/).filter((w: string) => w.length > 2);
+      const matchCount = nameWords.filter((w: string) => resultTitle.includes(w)).length;
       if (nameWords.length > 0 && matchCount < Math.ceil(nameWords.length * 0.4)) continue;
 
-      // Validate location match
       const fullText = `${result.title || ''} ${result.description || ''} ${result.markdown || ''}`.toLowerCase();
       const cityLower = city.toLowerCase();
       if (!fullText.includes(cityLower)) {
-        // Check if at least partial location words match
-        const cityWords = cityLower.split(/\s+/).filter(w => w.length > 2);
-        const cityMatch = cityWords.some(w => fullText.includes(w));
-        if (!cityMatch) continue;
+        const cityWords = cityLower.split(/\s+/).filter((w: string) => w.length > 2);
+        if (!cityWords.some((w: string) => fullText.includes(w))) continue;
       }
 
-      // Extract data
-      const socialMedia = extractSocialLinks(fullText);
-      const email = extractEmail(fullText);
-
-      return { website: result.url, email, socialMedia };
+      return {
+        website: result.url,
+        email: extractEmail(fullText),
+        socialMedia: extractSocialLinks(fullText),
+      };
     }
   } catch (e) {
-    console.warn('Firecrawl search failed for', businessName, e);
+    clearTimeout(timeout);
+    console.warn('Firecrawl failed for', businessName, e);
   }
 
   return { website: null, email: null, socialMedia: {} };
 }
-
-// ── Extraction helpers ──
 
 function extractSocialLinks(text: string): Record<string, string> {
   const socials: Record<string, string> = {};
@@ -145,33 +155,39 @@ function extractEmail(text: string): string | null {
   return match && !match[0].includes('example.com') && !match[0].includes('sentry.io') ? match[0] : null;
 }
 
-// ── Deduplication ──
-
 function deduplicateLeads(leads: Lead[]): Lead[] {
   const seen = new Map<string, Lead>();
   for (const lead of leads) {
     const key = lead.businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!seen.has(key)) {
-      seen.set(key, lead);
-    }
+    if (!seen.has(key)) seen.set(key, lead);
   }
   return Array.from(seen.values());
 }
 
 // ── Main handler ──
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { businessType, location, limit = 10 } = await req.json();
+    const { businessType, location, limit = 20, enrichMode = 'parallel' } = await req.json();
 
     if (!businessType || !location) {
       return new Response(
         JSON.stringify({ success: false, error: 'businessType and location are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check cache
+    const cacheKey = `${businessType}|${location}|${limit}`.toLowerCase();
+    const cached = getCached(cacheKey);
+    if (cached) {
+      console.log('Cache hit for', cacheKey);
+      return new Response(
+        JSON.stringify(cached),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -187,74 +203,65 @@ Deno.serve(async (req) => {
 
     console.log(`Searching: "${businessType}" in "${location}" (limit: ${limit})`);
 
-    // Step 1: Search Foursquare
+    // Step 1: Get Foursquare results
     const places = await searchFoursquare(businessType, location, foursquareKey, limit);
     console.log(`Foursquare returned ${places.length} places`);
 
     if (places.length === 0) {
-      return new Response(
-        JSON.stringify({ success: true, data: [], totalFound: 0 }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      const empty = { success: true, data: [], totalFound: 0 };
+      return new Response(JSON.stringify(empty), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Step 2: Build leads from Foursquare data, then enrich with Firecrawl in parallel
-    const enrichPromises = places.map(async (place): Promise<Lead> => {
+    // Step 2: Build base leads from Foursquare
+    const baseLeads: Lead[] = places.map(place => {
       const city = place.location?.locality || place.location?.region || location;
       const country = place.location?.country || null;
       const category = place.categories?.[0]?.name || businessType;
 
-      let website = place.website || null;
-      let email = place.email || null;
-      let phone = place.tel || null;
-      let socialMedia: Record<string, string> = {};
-      let enriched = false;
-
-      // Step 2b: Use Firecrawl to discover website/contacts if we have the key
-      if (firecrawlKey && !website) {
-        const discovery = await discoverWebsite(place.name, city, firecrawlKey);
-        if (discovery.website) {
-          website = discovery.website;
-          email = email || discovery.email;
-          socialMedia = discovery.socialMedia;
-          enriched = true;
-        }
-      }
-
-      // Generate insight reason
-      let reason = 'Verified local business from Foursquare';
-      if (!website) reason = 'No website found — potential opportunity for web services';
-      else if (Object.keys(socialMedia).length === 0) reason = 'Has website but limited social media presence';
-      else reason = 'Active business with web presence — good outreach candidate';
-
       return {
-        id: `fsq-${place.fsq_place_id || Date.now()}`,
+        id: `fsq-${place.fsq_place_id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         businessName: place.name,
         category,
         address: place.location?.formatted_address || place.location?.address || null,
         city,
         country,
-        website,
-        email,
-        phone,
-        socialMedia,
-        source: enriched ? 'enriched' : 'foursquare',
-        enriched,
-        reason,
+        website: place.website || null,
+        email: place.email || null,
+        phone: place.tel || null,
+        socialMedia: {},
+        source: 'foursquare' as const,
+        enriched: false,
+        reason: place.website ? 'Active business with web presence' : 'No website found — potential opportunity for web services',
       };
     });
 
-    const leads = await Promise.all(enrichPromises);
+    // Step 3: Enrich in parallel with Firecrawl (only businesses without websites)
+    if (firecrawlKey && enrichMode === 'parallel') {
+      const enrichTargets = baseLeads.filter(l => !l.website).slice(0, 10); // Max 10 enrichments per request
+      const enrichPromises = enrichTargets.map(async (lead) => {
+        const discovery = await discoverWebsite(lead.businessName, lead.city || location, firecrawlKey);
+        if (discovery.website) {
+          lead.website = discovery.website;
+          lead.email = lead.email || discovery.email;
+          lead.socialMedia = discovery.socialMedia;
+          lead.source = 'enriched';
+          lead.enriched = true;
+          lead.reason = Object.keys(discovery.socialMedia).length > 0
+            ? 'Active business with web presence — good outreach candidate'
+            : 'Has website but limited social media presence';
+        }
+      });
+      await Promise.allSettled(enrichPromises);
+    }
 
-    // Step 3: Deduplicate and limit
-    const uniqueLeads = deduplicateLeads(leads).slice(0, limit);
+    const uniqueLeads = deduplicateLeads(baseLeads).slice(0, limit);
+    const result = { success: true, data: uniqueLeads, totalFound: uniqueLeads.length };
 
-    console.log(`Returning ${uniqueLeads.length} verified leads`);
+    // Cache the result
+    setCache(cacheKey, result);
 
-    return new Response(
-      JSON.stringify({ success: true, data: uniqueLeads, totalFound: uniqueLeads.length }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.log(`Returning ${uniqueLeads.length} leads`);
+    return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Error:', error);
     return new Response(

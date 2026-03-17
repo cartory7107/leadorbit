@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { Search, MapPin, Briefcase } from "lucide-react";
+import { Search, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import LocationAutocomplete from "@/components/LocationAutocomplete";
 
 interface LeadSearchProps {
   onSearch: (businessType: string, location: string, service: string) => void;
@@ -53,17 +54,7 @@ const LeadSearch = ({ onSearch, isLoading }: LeadSearchProps) => {
 
         <div className="space-y-1">
           <label className="micro-label">Target Location</label>
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="City or Country"
-              className="w-full h-12 pl-10 pr-4 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
-              required
-            />
-          </div>
+          <LocationAutocomplete value={location} onChange={setLocation} />
         </div>
 
         <div className="space-y-1">

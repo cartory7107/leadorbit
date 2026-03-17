@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import HeroSection from "@/components/HeroSection";
 import LeadSearch from "@/components/LeadSearch";
 import LeadCard from "@/components/LeadCard";
+import LeadCardSkeleton from "@/components/LeadCardSkeleton";
 import OutreachPanel from "@/components/OutreachPanel";
 import { searchLeads, enrichLead, leadsToCSV, type Lead } from "@/lib/leadGenerator";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +36,12 @@ const Index = () => {
     setService(svc);
     setSearchDone(false);
     setSearchError(null);
+    setLeads([]); // Clear old results
+
+    // Scroll to results area immediately to show skeletons
+    setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
 
     try {
       const limit = isPremium ? 100 : FREE_LIMIT + 5;
@@ -46,10 +53,6 @@ const Index = () => {
       if (result.leads.length === 0) {
         setSearchError("No leads found. Try a different business type or location.");
       }
-
-      setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Search failed";
       setSearchError(msg);
@@ -124,94 +127,116 @@ const Index = () => {
           <LeadSearch onSearch={handleSearch} isLoading={isLoading} />
         </div>
 
-        <AnimatePresence>
-          {searchDone && (
-            <motion.div
-              ref={resultsRef}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              className="container max-w-5xl mx-auto px-4 mt-12 mb-20"
-            >
-              {searchError && leads.length === 0 ? (
-                <div className="text-center py-12">
-                  <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-foreground mb-2">Search Issue</h3>
-                  <p className="text-muted-foreground text-sm max-w-md mx-auto">{searchError}</p>
+        {/* Results area — show skeletons while loading, results when done */}
+        <div ref={resultsRef} className="container max-w-5xl mx-auto px-4 mt-12 mb-20">
+          <AnimatePresence mode="wait">
+            {isLoading && (
+              <motion.div
+                key="skeletons"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="mb-6">
+                  <div className="h-6 w-48 rounded bg-secondary animate-pulse" />
+                  <div className="h-4 w-72 rounded bg-secondary/60 animate-pulse mt-2" />
                 </div>
-              ) : leads.length > 0 && (
-                <>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-                    <div>
-                      <h2 className="text-xl font-bold text-foreground">
-                        Found <span className="text-primary font-mono-data">{totalFound}</span> Verified Leads
-                      </h2>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Powered by Foursquare Places + Firecrawl enrichment
-                        {!isPremium && ` · Showing ${Math.min(FREE_LIMIT, leads.length)} of ${totalFound}`}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={handleCopyAll}>
-                        <Copy className="w-3.5 h-3.5" />
-                        Copy All
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                        <Download className="w-3.5 h-3.5" />
-                        Export CSV
-                      </Button>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <LeadCardSkeleton key={i} index={i} />
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {visibleLeads.map((lead, i) => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={lead}
-                        index={i}
-                        isLocked={false}
-                        onOutreach={setSelectedLead}
-                        onEnrich={handleEnrich}
-                        isEnriching={enrichingIds.has(lead.id)}
-                      />
-                    ))}
-                    {lockedLeads.slice(0, 4).map((lead, i) => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={lead}
-                        index={visibleLeads.length + i}
-                        isLocked={true}
-                        onOutreach={() => {}}
-                      />
-                    ))}
+            {!isLoading && searchDone && (
+              <motion.div
+                key="results"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+              >
+                {searchError && leads.length === 0 ? (
+                  <div className="text-center py-12">
+                    <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-foreground mb-2">Search Issue</h3>
+                    <p className="text-muted-foreground text-sm max-w-md mx-auto">{searchError}</p>
                   </div>
+                ) : leads.length > 0 && (
+                  <>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                      <div>
+                        <h2 className="text-xl font-bold text-foreground">
+                          Found <span className="text-primary font-mono-data">{totalFound}</span> Verified Leads
+                        </h2>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Powered by Foursquare Places + Firecrawl enrichment
+                          {!isPremium && ` · Showing ${Math.min(FREE_LIMIT, leads.length)} of ${totalFound}`}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={handleCopyAll}>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copy All
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={handleExportCSV}>
+                          <Download className="w-3.5 h-3.5" />
+                          Export CSV
+                        </Button>
+                      </div>
+                    </div>
 
-                  {!isPremium && lockedLeads.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.5 }}
-                      className="relative mt-6 p-8 rounded-xl bg-card border border-primary/20 text-center"
-                      style={{ boxShadow: "var(--shadow-glow)" }}
-                    >
-                      <Lock className="w-8 h-8 text-primary mx-auto mb-3" />
-                      <h3 className="text-lg font-bold text-foreground mb-2">
-                        Unlock up to 100 leads per search
-                      </h3>
-                      <p className="text-muted-foreground text-sm mb-5">
-                        Get full access to all verified leads with contact details for just $5
-                      </p>
-                      <Button variant="premium" size="lg" onClick={handleUnlock}>
-                        <Lock className="w-4 h-4" />
-                        Unlock All Leads — $5
-                      </Button>
-                    </motion.div>
-                  )}
-                </>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {visibleLeads.map((lead, i) => (
+                        <LeadCard
+                          key={lead.id}
+                          lead={lead}
+                          index={i}
+                          isLocked={false}
+                          onOutreach={setSelectedLead}
+                          onEnrich={handleEnrich}
+                          isEnriching={enrichingIds.has(lead.id)}
+                        />
+                      ))}
+                      {lockedLeads.slice(0, 4).map((lead, i) => (
+                        <LeadCard
+                          key={lead.id}
+                          lead={lead}
+                          index={visibleLeads.length + i}
+                          isLocked={true}
+                          onOutreach={() => {}}
+                        />
+                      ))}
+                    </div>
+
+                    {!isPremium && lockedLeads.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 }}
+                        className="relative mt-6 p-8 rounded-xl bg-card border border-primary/20 text-center"
+                        style={{ boxShadow: "var(--shadow-glow)" }}
+                      >
+                        <Lock className="w-8 h-8 text-primary mx-auto mb-3" />
+                        <h3 className="text-lg font-bold text-foreground mb-2">
+                          Unlock up to 100 leads per search
+                        </h3>
+                        <p className="text-muted-foreground text-sm mb-5">
+                          Get full access to all verified leads with contact details for just $5
+                        </p>
+                        <Button variant="premium" size="lg" onClick={handleUnlock}>
+                          <Lock className="w-4 h-4" />
+                          Unlock All Leads — $5
+                        </Button>
+                      </motion.div>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </main>
 
       <footer className="border-t border-border/50 py-8 mt-12">
