@@ -3,7 +3,7 @@ import { Search, Briefcase, MapPin, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import SmartAutocomplete from "@/components/SmartAutocomplete";
-import { supabase } from "@/integrations/supabase/client";
+
 
 interface LeadSearchProps {
   onSearch: (businessType: string, location: string, service: string) => void;
