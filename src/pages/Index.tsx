@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Lock, Copy, AlertCircle } from "lucide-react";
+import { Download, Lock, Copy, AlertCircle, Map, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HeroSection from "@/components/HeroSection";
 import LeadSearch from "@/components/LeadSearch";
@@ -10,10 +10,11 @@ import { searchLeads, enrichLead, leadsToCSV, type Lead } from "@/lib/leadGenera
 import { useToast } from "@/hooks/use-toast";
 import logoImage from "@/assets/logo.png";
 
-const FREE_LIMIT = 10;
+const FREE_LIMIT = 20;
 
 const Index = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [totalFound, setTotalFound] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [service, setService] = useState("");
@@ -36,11 +37,13 @@ const Index = () => {
     setSearchError(null);
 
     try {
-      const newLeads = await searchLeads(businessType, location, 20);
-      setLeads(newLeads);
+      const limit = isPremium ? 100 : FREE_LIMIT + 10; // fetch extra for paywall preview
+      const result = await searchLeads(businessType, location, limit);
+      setLeads(result.leads);
+      setTotalFound(result.totalFound);
       setSearchDone(true);
 
-      if (newLeads.length === 0) {
+      if (result.leads.length === 0) {
         setSearchError("No leads found. Try a different business type or location.");
       }
 
@@ -55,7 +58,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, isPremium]);
 
   const handleEnrich = useCallback(async (lead: Lead) => {
     setEnrichingIds(prev => new Set(prev).add(lead.id));
@@ -78,7 +81,11 @@ const Index = () => {
 
   const visibleLeads = isPremium ? leads : leads.slice(0, FREE_LIMIT);
   const lockedLeads = isPremium ? [] : leads.slice(FREE_LIMIT);
-  const totalFound = leads.length;
+
+  const sourceStats = {
+    maps: leads.filter(l => l.source === 'google_maps' || l.source === 'both').length,
+    web: leads.filter(l => l.source === 'firecrawl' || l.source === 'both').length,
+  };
 
   const handleExportCSV = () => {
     const data = leadsToCSV(visibleLeads);
@@ -105,7 +112,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-secondary">
+      <header className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-border/50">
         <div className="container flex items-center justify-between h-14">
           <div className="flex items-center gap-2.5">
             <img src={logoImage} alt="Cartory Lead Orbit" className="w-8 h-8 rounded-lg object-contain" />
@@ -118,12 +125,6 @@ const Index = () => {
       <main className="pt-14">
         <HeroSection onStart={handleStart} />
 
-        <div className="container max-w-2xl mx-auto px-4 mb-8">
-          <div className="h-[90px] rounded-lg bg-secondary/50 glass-border flex items-center justify-center">
-            <span className="micro-label text-muted-foreground/50">Sponsored</span>
-          </div>
-        </div>
-
         <div ref={toolRef}>
           <LeadSearch onSearch={handleSearch} isLoading={isLoading} />
         </div>
@@ -135,7 +136,7 @@ const Index = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5 }}
-              className="container max-w-4xl mx-auto px-4 mt-12 mb-20"
+              className="container max-w-5xl mx-auto px-4 mt-12 mb-20"
             >
               {searchError && leads.length === 0 ? (
                 <div className="text-center py-12">
@@ -150,9 +151,19 @@ const Index = () => {
                       <h2 className="text-xl font-bold text-foreground">
                         Found <span className="text-primary font-mono-data">{totalFound}</span> Real Leads
                       </h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {isPremium ? "All leads unlocked" : `Showing ${Math.min(FREE_LIMIT, totalFound)} of ${totalFound} leads`}
-                      </p>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Map className="w-3 h-3" /> {sourceStats.maps} from Maps
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Search className="w-3 h-3" /> {sourceStats.web} from Web
+                        </span>
+                        {!isPremium && (
+                          <span className="text-xs text-muted-foreground">
+                            · Showing {Math.min(FREE_LIMIT, leads.length)} of {totalFound}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={handleCopyAll}>
@@ -166,7 +177,7 @@ const Index = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {visibleLeads.map((lead, i) => (
                       <LeadCard
                         key={lead.id}
@@ -194,27 +205,22 @@ const Index = () => {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.5 }}
-                      className="relative mt-4 p-8 rounded-xl bg-card glass-border text-center"
+                      className="relative mt-6 p-8 rounded-xl bg-card border border-primary/20 text-center"
+                      style={{ boxShadow: "var(--shadow-glow)" }}
                     >
-                      <div className="relative z-10">
-                        <Lock className="w-8 h-8 text-primary mx-auto mb-3" />
-                        <h3 className="text-lg font-bold text-foreground mb-2">
-                          {totalFound - FREE_LIMIT} more real leads available
-                        </h3>
-                        <p className="text-muted-foreground text-sm mb-5">
-                          Unlock the full list for just $5
-                        </p>
-                        <Button variant="premium" size="lg" onClick={handleUnlock}>
-                          <Lock className="w-4 h-4" />
-                          Unlock {totalFound - FREE_LIMIT} More Leads — $5
-                        </Button>
-                      </div>
+                      <Lock className="w-8 h-8 text-primary mx-auto mb-3" />
+                      <h3 className="text-lg font-bold text-foreground mb-2">
+                        {totalFound - FREE_LIMIT}+ more leads available
+                      </h3>
+                      <p className="text-muted-foreground text-sm mb-5">
+                        Unlock 100+ leads with addresses, contact info & AI insights for just $5
+                      </p>
+                      <Button variant="premium" size="lg" onClick={handleUnlock}>
+                        <Lock className="w-4 h-4" />
+                        Unlock All Leads — $5
+                      </Button>
                     </motion.div>
                   )}
-
-                  <div className="mt-10 h-[90px] rounded-lg bg-secondary/50 glass-border flex items-center justify-center">
-                    <span className="micro-label text-muted-foreground/50">Sponsored</span>
-                  </div>
                 </>
               )}
             </motion.div>
@@ -222,7 +228,7 @@ const Index = () => {
         </AnimatePresence>
       </main>
 
-      <footer className="border-t border-secondary py-8 mt-12">
+      <footer className="border-t border-border/50 py-8 mt-12">
         <div className="container text-center">
           <p className="text-sm text-muted-foreground">Cartory Lead Orbit — AI Powered Lead Discovery</p>
           <div className="flex items-center justify-center gap-4 mt-3">

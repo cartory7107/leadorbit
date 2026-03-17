@@ -5,6 +5,7 @@ export interface Lead {
   businessName: string;
   industry: string;
   website: string | null;
+  address: string | null;
   socialMedia: Record<string, string>;
   reason: string;
   location: string;
@@ -12,9 +13,10 @@ export interface Lead {
   email: string | null;
   description: string | null;
   enriched: boolean;
+  source: 'google_maps' | 'firecrawl' | 'both';
 }
 
-export async function searchLeads(businessType: string, location: string, limit = 15): Promise<Lead[]> {
+export async function searchLeads(businessType: string, location: string, limit = 20): Promise<{ leads: Lead[]; totalFound: number }> {
   const { data, error } = await supabase.functions.invoke('search-leads', {
     body: { businessType, location, limit },
   });
@@ -27,7 +29,7 @@ export async function searchLeads(businessType: string, location: string, limit 
     throw new Error(data?.error || 'Search returned no results');
   }
 
-  return data.data as Lead[];
+  return { leads: data.data as Lead[], totalFound: data.totalFound || data.data.length };
 }
 
 export async function enrichLead(lead: Lead): Promise<Partial<Lead>> {
@@ -67,9 +69,9 @@ export function generateOutreach(lead: Lead, service?: string): { dm: string; em
 }
 
 export function leadsToCSV(leads: Lead[]): string {
-  const header = "Business Name,Industry,Website,Facebook,Instagram,Twitter,Email,Phone,AI Insight,Location";
+  const header = "Business Name,Industry,Website,Address,Facebook,Instagram,Twitter,Email,Phone,AI Insight,Location,Source";
   const rows = leads.map(l =>
-    `"${l.businessName}","${l.industry}","${l.website || "N/A"}","${l.socialMedia?.facebook || "N/A"}","${l.socialMedia?.instagram || "N/A"}","${l.socialMedia?.twitter || "N/A"}","${l.email || "N/A"}","${l.phone || "N/A"}","${l.reason}","${l.location}"`
+    `"${l.businessName}","${l.industry}","${l.website || "N/A"}","${l.address || "N/A"}","${l.socialMedia?.facebook || "N/A"}","${l.socialMedia?.instagram || "N/A"}","${l.socialMedia?.twitter || "N/A"}","${l.email || "N/A"}","${l.phone || "N/A"}","${l.reason}","${l.location}","${l.source}"`
   );
   return [header, ...rows].join("\n");
 }

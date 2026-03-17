@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Globe, ExternalLink, Lightbulb, MessageSquare, Mail, Phone, Loader2 } from "lucide-react";
+import { Globe, ExternalLink, Lightbulb, MessageSquare, Mail, Phone, MapPin, Loader2, Map, Search } from "lucide-react";
 import type { Lead } from "@/lib/leadGenerator";
 
 interface LeadCardProps {
@@ -21,46 +21,53 @@ const socialIcons: Record<string, string> = {
   tiktok: "TT",
 };
 
+const sourceLabel: Record<string, { text: string; icon: React.ReactNode }> = {
+  google_maps: { text: "Maps", icon: <Map className="w-3 h-3" /> },
+  firecrawl: { text: "Web", icon: <Search className="w-3 h-3" /> },
+  both: { text: "Verified", icon: <Globe className="w-3 h-3" /> },
+};
+
 const LeadCard = ({ lead, index, isLocked, onOutreach, onEnrich, isEnriching }: LeadCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const socialEntries = Object.entries(lead.socialMedia || {});
+  const src = sourceLabel[lead.source] || sourceLabel.firecrawl;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.05, ease: [0.16, 1, 0.3, 1] }}
-      className={`relative bg-card rounded-lg p-4 transition-all duration-200 cursor-pointer ${isLocked ? "opacity-40 blur-[2px] pointer-events-none select-none" : ""}`}
+      transition={{ duration: 0.4, delay: index * 0.04, ease: [0.16, 1, 0.3, 1] }}
+      className={`relative bg-card rounded-xl p-5 transition-all duration-200 cursor-pointer border border-border/50 hover:border-primary/30 ${isLocked ? "opacity-40 blur-[2px] pointer-events-none select-none" : ""}`}
       style={{ boxShadow: isHovered ? "var(--shadow-hover)" : "var(--shadow-subtle)" }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => !isLocked && onOutreach(lead)}
     >
-      <div className="flex items-start justify-between gap-3">
+      {/* Source badge */}
+      <div className="absolute top-3 right-3 flex items-center gap-1">
+        {lead.enriched && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">ENRICHED</span>
+        )}
+        <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground font-medium">
+          {src.icon}
+          {src.text}
+        </span>
+      </div>
+
+      <div className="flex items-start justify-between gap-3 pr-20">
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground truncate">{lead.businessName}</h3>
+          <h3 className="font-semibold text-foreground truncate text-sm">{lead.businessName}</h3>
           <p className="micro-label mt-1">{lead.industry} · {lead.location}</p>
         </div>
-        <div className="flex items-center gap-1.5">
-          {!lead.enriched && lead.website && onEnrich && (
-            <button
-              className="shrink-0 p-2 rounded-md bg-secondary text-accent hover:bg-accent hover:text-accent-foreground transition-all"
-              onClick={(e) => { e.stopPropagation(); onEnrich(lead); }}
-              title="Enrich lead data"
-              disabled={isEnriching}
-            >
-              {isEnriching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-            </button>
-          )}
-          <button
-            className="shrink-0 p-2 rounded-md bg-secondary text-primary hover:bg-primary hover:text-primary-foreground transition-all"
-            onClick={(e) => { e.stopPropagation(); onOutreach(lead); }}
-            title="Generate outreach"
-          >
-            <MessageSquare className="w-4 h-4" />
-          </button>
-        </div>
       </div>
+
+      {/* Address */}
+      {lead.address && (
+        <div className="flex items-center gap-1.5 mt-2.5 text-xs text-muted-foreground">
+          <MapPin className="w-3 h-3 shrink-0" />
+          <span className="truncate">{lead.address}</span>
+        </div>
+      )}
 
       {/* Website & Socials */}
       <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -96,23 +103,13 @@ const LeadCard = ({ lead, index, isLocked, onOutreach, onEnrich, isEnriching }: 
       {(lead.email || lead.phone) && (
         <div className="flex items-center gap-3 mt-2 text-xs">
           {lead.email && (
-            <a
-              href={`mailto:${lead.email}`}
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Mail className="w-3 h-3" />
-              {lead.email}
+            <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1 text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+              <Mail className="w-3 h-3" /> {lead.email}
             </a>
           )}
           {lead.phone && (
-            <a
-              href={`tel:${lead.phone}`}
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Phone className="w-3 h-3" />
-              {lead.phone}
+            <a href={`tel:${lead.phone}`} className="inline-flex items-center gap-1 text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+              <Phone className="w-3 h-3" /> {lead.phone}
             </a>
           )}
         </div>
@@ -124,11 +121,26 @@ const LeadCard = ({ lead, index, isLocked, onOutreach, onEnrich, isEnriching }: 
         <span>{lead.reason}</span>
       </div>
 
-      {lead.enriched && (
-        <div className="absolute top-2 right-2">
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">ENRICHED</span>
-        </div>
-      )}
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/50">
+        {!lead.enriched && lead.website && onEnrich && (
+          <button
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-secondary text-accent hover:bg-accent hover:text-accent-foreground text-xs font-medium transition-all"
+            onClick={(e) => { e.stopPropagation(); onEnrich(lead); }}
+            disabled={isEnriching}
+          >
+            {isEnriching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+            {isEnriching ? "Enriching..." : "Enrich"}
+          </button>
+        )}
+        <button
+          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground text-xs font-medium transition-all"
+          onClick={(e) => { e.stopPropagation(); onOutreach(lead); }}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          Outreach
+        </button>
+      </div>
     </motion.div>
   );
 };
