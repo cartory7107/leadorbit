@@ -8,7 +8,7 @@ import LeadCard from "@/components/LeadCard";
 import OutreachPanel from "@/components/OutreachPanel";
 import { generateLeads, leadsToCSV, type Lead } from "@/lib/leadGenerator";
 import { useToast } from "@/hooks/use-toast";
-import logoImage from "@/assets/og-image.png";
+import logoImage from "@/assets/logo.png";
 
 const FREE_LIMIT = 10;
 const TOTAL_LEADS = 30;
