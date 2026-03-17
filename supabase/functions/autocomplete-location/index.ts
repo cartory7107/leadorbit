@@ -45,12 +45,13 @@ serve(async (req) => {
       throw new Error("FOURSQUARE_API_KEY not configured");
     }
 
-    const fsqUrl = `https://api.foursquare.com/v3/autocomplete?query=${encodeURIComponent(query)}&types=geo&limit=10`;
+    const fsqUrl = `https://places-api.foursquare.com/autocomplete?query=${encodeURIComponent(query)}&types=geo&limit=10`;
 
     const response = await fetch(fsqUrl, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
+        "X-Places-Api-Version": "2025-06-17",
       },
     });
 
