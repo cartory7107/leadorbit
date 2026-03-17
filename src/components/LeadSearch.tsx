@@ -67,14 +67,6 @@ const LeadSearch = ({ onSearch, isLoading }: LeadSearchProps) => {
     if (cached && Date.now() - cached.ts < LOC_CACHE_TTL) return cached.data;
 
     try {
-      const { data, error } = await supabase.functions.invoke("autocomplete-location", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        body: undefined,
-      });
-
-      // supabase.functions.invoke doesn't support query params well for GET,
-      // so let's use fetch directly
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const url = `https://${projectId}.supabase.co/functions/v1/autocomplete-location?query=${encodeURIComponent(query)}`;
