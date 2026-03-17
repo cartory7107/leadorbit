@@ -4,17 +4,16 @@ const corsHeaders = {
 };
 
 interface FoursquarePlace {
-  fsq_id: string;
+  fsq_place_id: string;
   name: string;
-  location: {
+  location?: {
     address?: string;
     locality?: string;
     region?: string;
     country?: string;
     formatted_address?: string;
   };
-  categories: { name: string }[];
-  geocodes?: { main?: { latitude: number; longitude: number } };
+  categories?: { name: string }[];
   website?: string;
   tel?: string;
   email?: string;
@@ -41,7 +40,8 @@ interface Lead {
 async function searchFoursquare(businessType: string, location: string, apiKey: string, limit: number): Promise<FoursquarePlace[]> {
   const query = encodeURIComponent(businessType);
   const near = encodeURIComponent(location);
-  const url = `https://places-api.foursquare.com/places/search?query=${query}&near=${near}&limit=${Math.min(limit, 50)}&sort=RELEVANCE`;
+  const fields = 'fsq_place_id,name,location,categories,website,tel,email';
+  const url = `https://places-api.foursquare.com/places/search?query=${query}&near=${near}&limit=${Math.min(limit, 50)}&sort=RELEVANCE&fields=${fields}`;
 
   console.log('Foursquare URL:', url);
 
@@ -49,16 +49,17 @@ async function searchFoursquare(businessType: string, location: string, apiKey: 
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Accept': 'application/json',
-      'Foursquare-Version': '2024-01-01',
+      'X-Places-Api-Version': '2025-06-17',
     },
   });
 
   const data = await response.json();
   if (!response.ok) {
-    console.error('Foursquare error:', data);
+    console.error('Foursquare error:', JSON.stringify(data));
     return [];
   }
 
+  console.log('Foursquare raw response keys:', Object.keys(data));
   return data.results || [];
 }
 
