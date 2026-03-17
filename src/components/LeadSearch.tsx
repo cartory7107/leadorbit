@@ -69,13 +69,16 @@ const LeadSearch = ({ onSearch, isLoading }: LeadSearchProps) => {
     try {
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const url = `https://${projectId}.supabase.co/functions/v1/autocomplete-location?query=${encodeURIComponent(query)}`;
+      const url = `https://${projectId}.supabase.co/functions/v1/autocomplete-location`;
       
       const res = await fetch(url, {
+        method: "POST",
         headers: {
           apikey: anonKey,
           Authorization: `Bearer ${anonKey}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({ query }),
       });
 
       if (!res.ok) throw new Error("Failed");
