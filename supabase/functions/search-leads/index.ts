@@ -3,20 +3,119 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+interface FoursquarePlace {
+  fsq_id: string;
+  name: string;
+  location: {
+    address?: string;
+    locality?: string;
+    region?: string;
+    country?: string;
+    formatted_address?: string;
+  };
+  categories: { name: string }[];
+  geocodes?: { main?: { latitude: number; longitude: number } };
+  website?: string;
+  tel?: string;
+  email?: string;
+}
+
 interface Lead {
   id: string;
   businessName: string;
-  industry: string;
-  website: string | null;
+  category: string;
   address: string | null;
-  socialMedia: Record<string, string>;
-  reason: string;
-  location: string;
-  phone: string | null;
+  city: string | null;
+  country: string | null;
+  website: string | null;
   email: string | null;
-  description: string | null;
+  phone: string | null;
+  socialMedia: Record<string, string>;
+  source: 'foursquare' | 'enriched';
   enriched: boolean;
-  source: 'google_maps' | 'firecrawl' | 'both';
+  reason: string;
+}
+
+// ── Foursquare Places Search ──
+
+async function searchFoursquare(businessType: string, location: string, apiKey: string, limit: number): Promise<FoursquarePlace[]> {
+  const query = encodeURIComponent(businessType);
+  const near = encodeURIComponent(location);
+  const url = `https://api.foursquare.com/v3/places/search?query=${query}&near=${near}&limit=${Math.min(limit, 50)}&sort=RELEVANCE`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': apiKey,
+      'Accept': 'application/json',
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    console.error('Foursquare error:', data);
+    return [];
+  }
+
+  return data.results || [];
+}
+
+// ── Firecrawl Website Discovery ──
+
+async function discoverWebsite(businessName: string, city: string, firecrawlKey: string): Promise<{ website: string | null; email: string | null; socialMedia: Record<string, string> }> {
+  const query = `"${businessName}" "${city}" official website`;
+
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        limit: 3,
+        scrapeOptions: { formats: ['markdown'] },
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.data?.length) return { website: null, email: null, socialMedia: {} };
+
+    const skipDomains = ['yelp.com', 'tripadvisor.com', 'yellowpages.com', 'bbb.org', 'google.com', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'youtube.com', 'reddit.com', 'wikipedia.org', 'amazon.com', 'tiktok.com', 'foursquare.com'];
+
+    for (const result of data.data) {
+      const url = (result.url || '').toLowerCase();
+      if (skipDomains.some(d => url.includes(d))) continue;
+
+      // Validate business name similarity
+      const resultTitle = (result.title || '').toLowerCase();
+      const nameLower = businessName.toLowerCase();
+      const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
+      const matchCount = nameWords.filter(w => resultTitle.includes(w)).length;
+
+      if (nameWords.length > 0 && matchCount < Math.ceil(nameWords.length * 0.4)) continue;
+
+      // Validate location match
+      const fullText = `${result.title || ''} ${result.description || ''} ${result.markdown || ''}`.toLowerCase();
+      const cityLower = city.toLowerCase();
+      if (!fullText.includes(cityLower)) {
+        // Check if at least partial location words match
+        const cityWords = cityLower.split(/\s+/).filter(w => w.length > 2);
+        const cityMatch = cityWords.some(w => fullText.includes(w));
+        if (!cityMatch) continue;
+      }
+
+      // Extract data
+      const socialMedia = extractSocialLinks(fullText);
+      const email = extractEmail(fullText);
+
+      return { website: result.url, email, socialMedia };
+    }
+  } catch (e) {
+    console.warn('Firecrawl search failed for', businessName, e);
+  }
+
+  return { website: null, email: null, socialMedia: {} };
 }
 
 // ── Extraction helpers ──
@@ -39,119 +138,19 @@ function extractSocialLinks(text: string): Record<string, string> {
 
 function extractEmail(text: string): string | null {
   const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  return match && !match[0].includes('example.com') ? match[0] : null;
-}
-
-function extractPhone(text: string): string | null {
-  const match = text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}/);
-  if (match && match[0].replace(/\D/g, '').length >= 7) return match[0].trim();
-  return null;
-}
-
-function normalizeName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-// ── Firecrawl Web Search ──
-
-async function searchFirecrawl(businessType: string, location: string, apiKey: string, limit: number): Promise<Lead[]> {
-  const query = `"${businessType}" in ${location} small business`;
-
-  const response = await fetch('https://api.firecrawl.dev/v1/search', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query,
-      limit: Math.min(limit + 10, 30),
-      scrapeOptions: { formats: ['markdown'] },
-    }),
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    console.error('Firecrawl error:', data);
-    return [];
-  }
-
-  const skipDomains = ['yelp.com', 'tripadvisor.com', 'yellowpages.com', 'bbb.org', 'google.com', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'youtube.com', 'reddit.com', 'wikipedia.org', 'amazon.com', 'tiktok.com'];
-
-  const leads: Lead[] = [];
-  for (const result of (data.data || [])) {
-    if (leads.length >= limit) break;
-    const url = (result.url || '').toLowerCase();
-    if (skipDomains.some(d => url.includes(d))) continue;
-
-    const title = (result.title || '').toLowerCase();
-    if (title.includes('best ') || title.includes(' top ') || title.includes('list of')) continue;
-
-    const fullText = `${result.title || ''} ${result.description || ''} ${result.markdown || ''}`;
-
-    let name = (result.title || '')
-      .replace(/\s*[-|–—]\s*.{0,50}$/, '')
-      .replace(/\s*\|.*$/, '')
-      .trim();
-
-    if (!name || name.length < 2) {
-      try {
-        const hostname = new URL(result.url).hostname.replace('www.', '');
-        name = hostname.split('.')[0].replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
-      } catch { name = 'Unknown Business'; }
-    }
-
-    const socialLinks = extractSocialLinks(fullText);
-    const hasSocials = Object.keys(socialLinks).length > 0;
-
-    leads.push({
-      id: `fc-${leads.length}-${Date.now()}`,
-      businessName: name,
-      industry: businessType,
-      website: result.url || null,
-      address: null,
-      socialMedia: socialLinks,
-      reason: !hasSocials
-        ? 'Limited social media presence detected'
-        : 'Active business that could benefit from enhanced digital marketing',
-      location,
-      phone: extractPhone(fullText),
-      email: extractEmail(fullText),
-      description: result.description || null,
-      enriched: false,
-      source: 'firecrawl',
-    });
-  }
-
-  return leads;
+  return match && !match[0].includes('example.com') && !match[0].includes('sentry.io') ? match[0] : null;
 }
 
 // ── Deduplication ──
 
 function deduplicateLeads(leads: Lead[]): Lead[] {
   const seen = new Map<string, Lead>();
-
   for (const lead of leads) {
-    const key = normalizeName(lead.businessName);
-    const existing = seen.get(key);
-
-    if (!existing) {
+    const key = lead.businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!seen.has(key)) {
       seen.set(key, lead);
-    } else {
-      // Merge: prefer the one with more data
-      seen.set(key, {
-        ...existing,
-        website: existing.website || lead.website,
-        address: existing.address || lead.address,
-        phone: existing.phone || lead.phone,
-        email: existing.email || lead.email,
-        socialMedia: { ...existing.socialMedia, ...lead.socialMedia },
-        description: existing.description || lead.description,
-        source: 'both',
-      });
     }
   }
-
   return Array.from(seen.values());
 }
 
@@ -163,7 +162,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { businessType, location, limit = 20 } = await req.json();
+    const { businessType, location, limit = 10 } = await req.json();
 
     if (!businessType || !location) {
       return new Response(
@@ -172,30 +171,84 @@ Deno.serve(async (req) => {
       );
     }
 
+    const foursquareKey = Deno.env.get('FOURSQUARE_API_KEY');
     const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
 
-    if (!firecrawlKey) {
+    if (!foursquareKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Firecrawl connector not configured.' }),
+        JSON.stringify({ success: false, error: 'Foursquare API key not configured.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log(`Searching: "${businessType}" in "${location}" (limit: ${limit})`);
 
-    const firecrawlLeads = await searchFirecrawl(businessType, location, firecrawlKey, limit);
+    // Step 1: Search Foursquare
+    const places = await searchFoursquare(businessType, location, foursquareKey, limit);
+    console.log(`Foursquare returned ${places.length} places`);
 
-    console.log(`Firecrawl: ${firecrawlLeads.length}`);
+    if (places.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, data: [], totalFound: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    const allLeads = deduplicateLeads(firecrawlLeads);
+    // Step 2: Build leads from Foursquare data, then enrich with Firecrawl in parallel
+    const enrichPromises = places.map(async (place): Promise<Lead> => {
+      const city = place.location?.locality || place.location?.region || location;
+      const country = place.location?.country || null;
+      const category = place.categories?.[0]?.name || businessType;
 
-    // Limit results
-    const limitedLeads = allLeads.slice(0, limit);
+      let website = place.website || null;
+      let email = place.email || null;
+      let phone = place.tel || null;
+      let socialMedia: Record<string, string> = {};
+      let enriched = false;
 
-    console.log(`Returning ${limitedLeads.length} deduplicated leads`);
+      // Step 2b: Use Firecrawl to discover website/contacts if we have the key
+      if (firecrawlKey && !website) {
+        const discovery = await discoverWebsite(place.name, city, firecrawlKey);
+        if (discovery.website) {
+          website = discovery.website;
+          email = email || discovery.email;
+          socialMedia = discovery.socialMedia;
+          enriched = true;
+        }
+      }
+
+      // Generate insight reason
+      let reason = 'Verified local business from Foursquare';
+      if (!website) reason = 'No website found — potential opportunity for web services';
+      else if (Object.keys(socialMedia).length === 0) reason = 'Has website but limited social media presence';
+      else reason = 'Active business with web presence — good outreach candidate';
+
+      return {
+        id: `fsq-${place.fsq_id}`,
+        businessName: place.name,
+        category,
+        address: place.location?.formatted_address || place.location?.address || null,
+        city,
+        country,
+        website,
+        email,
+        phone,
+        socialMedia,
+        source: enriched ? 'enriched' : 'foursquare',
+        enriched,
+        reason,
+      };
+    });
+
+    const leads = await Promise.all(enrichPromises);
+
+    // Step 3: Deduplicate and limit
+    const uniqueLeads = deduplicateLeads(leads).slice(0, limit);
+
+    console.log(`Returning ${uniqueLeads.length} verified leads`);
 
     return new Response(
-      JSON.stringify({ success: true, data: limitedLeads, totalFound: allLeads.length }),
+      JSON.stringify({ success: true, data: uniqueLeads, totalFound: uniqueLeads.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

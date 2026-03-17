@@ -3,20 +3,23 @@ import { supabase } from "@/integrations/supabase/client";
 export interface Lead {
   id: string;
   businessName: string;
-  industry: string;
-  website: string | null;
+  category: string;
   address: string | null;
-  socialMedia: Record<string, string>;
-  reason: string;
-  location: string;
-  phone: string | null;
+  city: string | null;
+  country: string | null;
+  website: string | null;
   email: string | null;
-  description: string | null;
+  phone: string | null;
+  socialMedia: Record<string, string>;
+  source: 'foursquare' | 'enriched';
   enriched: boolean;
-  source: 'google_maps' | 'firecrawl' | 'both';
+  reason: string;
+  // Keep backward compat
+  industry: string;
+  location: string;
 }
 
-export async function searchLeads(businessType: string, location: string, limit = 20): Promise<{ leads: Lead[]; totalFound: number }> {
+export async function searchLeads(businessType: string, location: string, limit = 10): Promise<{ leads: Lead[]; totalFound: number }> {
   const { data, error } = await supabase.functions.invoke('search-leads', {
     body: { businessType, location, limit },
   });
@@ -29,7 +32,14 @@ export async function searchLeads(businessType: string, location: string, limit 
     throw new Error(data?.error || 'Search returned no results');
   }
 
-  return { leads: data.data as Lead[], totalFound: data.totalFound || data.data.length };
+  // Map fields for backward compat
+  const leads = (data.data as Lead[]).map(l => ({
+    ...l,
+    industry: l.category || l.industry || '',
+    location: l.city || l.location || location,
+  }));
+
+  return { leads, totalFound: data.totalFound || leads.length };
 }
 
 export async function enrichLead(lead: Lead): Promise<Partial<Lead>> {
@@ -49,29 +59,32 @@ export async function enrichLead(lead: Lead): Promise<Partial<Lead>> {
     socialMedia: { ...lead.socialMedia, ...enriched.socialMedia },
     email: enriched.emails?.[0] || lead.email,
     phone: enriched.phones?.[0] || lead.phone,
-    description: enriched.description || lead.description,
     enriched: true,
   };
 }
 
 export function generateOutreach(lead: Lead, service?: string): { dm: string; email: string; short: string } {
+  const biz = lead.businessName;
+  const cat = lead.category || lead.industry;
+  const loc = lead.city || lead.location;
+
   const serviceText = service
     ? `I specialize in ${service} and believe it could significantly boost your business.`
     : "I help businesses strengthen their digital presence and attract more customers online.";
 
-  const dm = `Hi there! 👋 I came across ${lead.businessName} and was really impressed. I noticed ${lead.reason.toLowerCase()}, and I'd love to help. ${serviceText} Would you be open to a quick chat?`;
+  const dm = `Hi there! 👋 I came across ${biz} and was really impressed with your work in ${cat}. ${serviceText} Would you be open to a quick chat?`;
 
-  const email = `Subject: Quick idea for ${lead.businessName}\n\nHello,\n\nI recently came across ${lead.businessName} in ${lead.location} and I was impressed by your work in the ${lead.industry} space.\n\nHowever, I noticed that your business ${lead.reason.toLowerCase()}. ${serviceText}\n\nI've helped similar businesses increase their online visibility and revenue. I'd love to share a few ideas that could work for you.\n\nWould you be available for a brief 10-minute call this week?\n\nBest regards`;
+  const email = `Subject: Quick idea for ${biz}\n\nHello,\n\nI recently came across ${biz} in ${loc} and I was impressed by your work in the ${cat} space.\n\n${serviceText}\n\nI've helped similar businesses increase their online visibility and revenue. I'd love to share a few ideas that could work for you.\n\nWould you be available for a brief 10-minute call this week?\n\nBest regards`;
 
-  const short = `Hey! Noticed ${lead.businessName} ${lead.reason.toLowerCase()}. ${service ? `I offer ${service} that could help.` : "I can help fix that."} Interested?`;
+  const short = `Hey! Love what ${biz} is doing in ${cat}. ${service ? `I offer ${service} that could help grow your business.` : "I can help boost your online presence."} Interested?`;
 
   return { dm, email, short };
 }
 
 export function leadsToCSV(leads: Lead[]): string {
-  const header = "Business Name,Industry,Website,Address,Facebook,Instagram,Twitter,Email,Phone,AI Insight,Location,Source";
+  const header = "Business Name,Category,Address,Website,Email,Phone,Facebook,Instagram,Twitter,City,Country,Source";
   const rows = leads.map(l =>
-    `"${l.businessName}","${l.industry}","${l.website || "N/A"}","${l.address || "N/A"}","${l.socialMedia?.facebook || "N/A"}","${l.socialMedia?.instagram || "N/A"}","${l.socialMedia?.twitter || "N/A"}","${l.email || "N/A"}","${l.phone || "N/A"}","${l.reason}","${l.location}","${l.source}"`
+    `"${l.businessName}","${l.category || ''}","${l.address || 'N/A'}","${l.website || 'N/A'}","${l.email || 'N/A'}","${l.phone || 'N/A'}","${l.socialMedia?.facebook || 'N/A'}","${l.socialMedia?.instagram || 'N/A'}","${l.socialMedia?.twitter || 'N/A'}","${l.city || ''}","${l.country || ''}","${l.source}"`
   );
   return [header, ...rows].join("\n");
 }
