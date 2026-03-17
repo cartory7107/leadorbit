@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Globe, ExternalLink, Lightbulb, MessageSquare, Mail, Phone, MapPin, Loader2, Map, Search } from "lucide-react";
+import { Globe, ExternalLink, Lightbulb, MessageSquare, Mail, Phone, MapPin, Loader2, Search, CheckCircle2 } from "lucide-react";
 import type { Lead } from "@/lib/leadGenerator";
 
 interface LeadCardProps {
@@ -18,19 +18,11 @@ const socialIcons: Record<string, string> = {
   twitter: "X",
   linkedin: "LI",
   youtube: "YT",
-  tiktok: "TT",
-};
-
-const sourceLabel: Record<string, { text: string; icon: React.ReactNode }> = {
-  google_maps: { text: "Maps", icon: <Map className="w-3 h-3" /> },
-  firecrawl: { text: "Web", icon: <Search className="w-3 h-3" /> },
-  both: { text: "Verified", icon: <Globe className="w-3 h-3" /> },
 };
 
 const LeadCard = ({ lead, index, isLocked, onOutreach, onEnrich, isEnriching }: LeadCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const socialEntries = Object.entries(lead.socialMedia || {});
-  const src = sourceLabel[lead.source] || sourceLabel.firecrawl;
 
   return (
     <motion.div
@@ -46,18 +38,20 @@ const LeadCard = ({ lead, index, isLocked, onOutreach, onEnrich, isEnriching }: 
       {/* Source badge */}
       <div className="absolute top-3 right-3 flex items-center gap-1">
         {lead.enriched && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">ENRICHED</span>
+          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
+            <CheckCircle2 className="w-2.5 h-2.5" /> VERIFIED
+          </span>
         )}
         <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground font-medium">
-          {src.icon}
-          {src.text}
+          {lead.source === 'enriched' ? <Search className="w-3 h-3" /> : <MapPin className="w-3 h-3" />}
+          {lead.source === 'enriched' ? 'Enriched' : 'Foursquare'}
         </span>
       </div>
 
-      <div className="flex items-start justify-between gap-3 pr-20">
+      <div className="flex items-start justify-between gap-3 pr-24">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-foreground truncate text-sm">{lead.businessName}</h3>
-          <p className="micro-label mt-1">{lead.industry} · {lead.location}</p>
+          <p className="micro-label mt-1">{lead.category || lead.industry}{lead.city ? ` · ${lead.city}` : ''}{lead.country ? `, ${lead.country}` : ''}</p>
         </div>
       </div>
 

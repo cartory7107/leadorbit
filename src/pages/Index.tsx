@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Lock, Copy, AlertCircle, Map, Search } from "lucide-react";
+import { Download, Lock, Copy, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HeroSection from "@/components/HeroSection";
 import LeadSearch from "@/components/LeadSearch";
@@ -10,7 +10,7 @@ import { searchLeads, enrichLead, leadsToCSV, type Lead } from "@/lib/leadGenera
 import { useToast } from "@/hooks/use-toast";
 import logoImage from "@/assets/logo.png";
 
-const FREE_LIMIT = 20;
+const FREE_LIMIT = 10;
 
 const Index = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -37,7 +37,7 @@ const Index = () => {
     setSearchError(null);
 
     try {
-      const limit = isPremium ? 100 : FREE_LIMIT + 10; // fetch extra for paywall preview
+      const limit = isPremium ? 100 : FREE_LIMIT + 5;
       const result = await searchLeads(businessType, location, limit);
       setLeads(result.leads);
       setTotalFound(result.totalFound);
@@ -82,11 +82,6 @@ const Index = () => {
   const visibleLeads = isPremium ? leads : leads.slice(0, FREE_LIMIT);
   const lockedLeads = isPremium ? [] : leads.slice(FREE_LIMIT);
 
-  const sourceStats = {
-    maps: leads.filter(l => l.source === 'google_maps' || l.source === 'both').length,
-    web: leads.filter(l => l.source === 'firecrawl' || l.source === 'both').length,
-  };
-
   const handleExportCSV = () => {
     const data = leadsToCSV(visibleLeads);
     const blob = new Blob([data], { type: "text/csv" });
@@ -100,14 +95,14 @@ const Index = () => {
   };
 
   const handleCopyAll = async () => {
-    const text = visibleLeads.map(l => `${l.businessName} | ${l.industry} | ${l.website || "N/A"} | ${l.reason}`).join("\n");
+    const text = visibleLeads.map(l => `${l.businessName} | ${l.category || l.industry} | ${l.website || "N/A"} | ${l.email || "N/A"}`).join("\n");
     await navigator.clipboard.writeText(text);
     toast({ title: "Copied!", description: `${visibleLeads.length} leads copied to clipboard.` });
   };
 
   const handleUnlock = () => {
     setIsPremium(true);
-    toast({ title: "🎉 Premium Unlocked!", description: "You now have access to all leads." });
+    toast({ title: "🎉 Premium Unlocked!", description: "You now have access to 100 leads per search." });
   };
 
   return (
@@ -149,21 +144,12 @@ const Index = () => {
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                     <div>
                       <h2 className="text-xl font-bold text-foreground">
-                        Found <span className="text-primary font-mono-data">{totalFound}</span> Real Leads
+                        Found <span className="text-primary font-mono-data">{totalFound}</span> Verified Leads
                       </h2>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          <Map className="w-3 h-3" /> {sourceStats.maps} from Maps
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          <Search className="w-3 h-3" /> {sourceStats.web} from Web
-                        </span>
-                        {!isPremium && (
-                          <span className="text-xs text-muted-foreground">
-                            · Showing {Math.min(FREE_LIMIT, leads.length)} of {totalFound}
-                          </span>
-                        )}
-                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Powered by Foursquare Places + Firecrawl enrichment
+                        {!isPremium && ` · Showing ${Math.min(FREE_LIMIT, leads.length)} of ${totalFound}`}
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={handleCopyAll}>
@@ -210,10 +196,10 @@ const Index = () => {
                     >
                       <Lock className="w-8 h-8 text-primary mx-auto mb-3" />
                       <h3 className="text-lg font-bold text-foreground mb-2">
-                        {totalFound - FREE_LIMIT}+ more leads available
+                        Unlock up to 100 leads per search
                       </h3>
                       <p className="text-muted-foreground text-sm mb-5">
-                        Unlock 100+ leads with addresses, contact info & AI insights for just $5
+                        Get full access to all verified leads with contact details for just $5
                       </p>
                       <Button variant="premium" size="lg" onClick={handleUnlock}>
                         <Lock className="w-4 h-4" />
