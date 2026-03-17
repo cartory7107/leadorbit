@@ -1,17 +1,16 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Lock, Copy, Check } from "lucide-react";
+import { Download, Lock, Copy, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HeroSection from "@/components/HeroSection";
 import LeadSearch from "@/components/LeadSearch";
 import LeadCard from "@/components/LeadCard";
 import OutreachPanel from "@/components/OutreachPanel";
-import { generateLeads, leadsToCSV, type Lead } from "@/lib/leadGenerator";
+import { searchLeads, enrichLead, leadsToCSV, type Lead } from "@/lib/leadGenerator";
 import { useToast } from "@/hooks/use-toast";
 import logoImage from "@/assets/logo.png";
 
 const FREE_LIMIT = 10;
-const TOTAL_LEADS = 30;
 
 const Index = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -20,6 +19,8 @@ const Index = () => {
   const [service, setService] = useState("");
   const [isPremium, setIsPremium] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const resultsRef = useRef<HTMLDivElement>(null);
   const toolRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -28,23 +29,52 @@ const Index = () => {
     toolRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleSearch = useCallback((businessType: string, location: string, svc: string) => {
+  const handleSearch = useCallback(async (businessType: string, location: string, svc: string) => {
     setIsLoading(true);
     setService(svc);
     setSearchDone(false);
+    setSearchError(null);
 
-    // Simulate AI processing
-    setTimeout(() => {
-      const newLeads = generateLeads(businessType, location, TOTAL_LEADS);
+    try {
+      const newLeads = await searchLeads(businessType, location, 20);
       setLeads(newLeads);
-      setIsLoading(false);
       setSearchDone(true);
+
+      if (newLeads.length === 0) {
+        setSearchError("No leads found. Try a different business type or location.");
+      }
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
-    }, 2000);
-  }, []);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Search failed";
+      setSearchError(msg);
+      setSearchDone(true);
+      toast({ title: "Search Error", description: msg, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  const handleEnrich = useCallback(async (lead: Lead) => {
+    setEnrichingIds(prev => new Set(prev).add(lead.id));
+    try {
+      const enrichedData = await enrichLead(lead);
+      setLeads(prev => prev.map(l =>
+        l.id === lead.id ? { ...l, ...enrichedData, enriched: true } : l
+      ));
+      toast({ title: "Enriched!", description: `Found additional data for ${lead.businessName}` });
+    } catch {
+      toast({ title: "Enrichment failed", description: "Could not fetch additional data", variant: "destructive" });
+    } finally {
+      setEnrichingIds(prev => {
+        const next = new Set(prev);
+        next.delete(lead.id);
+        return next;
+      });
+    }
+  }, [toast]);
 
   const visibleLeads = isPremium ? leads : leads.slice(0, FREE_LIMIT);
   const lockedLeads = isPremium ? [] : leads.slice(FREE_LIMIT);
@@ -75,7 +105,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-secondary">
         <div className="container flex items-center justify-between h-14">
           <div className="flex items-center gap-2.5">
@@ -87,24 +116,20 @@ const Index = () => {
       </header>
 
       <main className="pt-14">
-        {/* Hero */}
         <HeroSection onStart={handleStart} />
 
-        {/* Ad Placeholder */}
         <div className="container max-w-2xl mx-auto px-4 mb-8">
           <div className="h-[90px] rounded-lg bg-secondary/50 glass-border flex items-center justify-center">
             <span className="micro-label text-muted-foreground/50">Sponsored</span>
           </div>
         </div>
 
-        {/* Tool */}
         <div ref={toolRef}>
           <LeadSearch onSearch={handleSearch} isLoading={isLoading} />
         </div>
 
-        {/* Results */}
         <AnimatePresence>
-          {searchDone && leads.length > 0 && (
+          {searchDone && (
             <motion.div
               ref={resultsRef}
               initial={{ opacity: 0 }}
@@ -112,85 +137,91 @@ const Index = () => {
               transition={{ duration: 0.5 }}
               className="container max-w-4xl mx-auto px-4 mt-12 mb-20"
             >
-              {/* Results header */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-foreground">
-                    Found <span className="text-primary font-mono-data">{totalFound}</span> Leads
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {isPremium ? "All leads unlocked" : `Showing ${FREE_LIMIT} of ${totalFound} leads`}
-                  </p>
+              {searchError && leads.length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Search Issue</h3>
+                  <p className="text-muted-foreground text-sm max-w-md mx-auto">{searchError}</p>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleCopyAll}>
-                    <Copy className="w-3.5 h-3.5" />
-                    Copy All
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                    <Download className="w-3.5 h-3.5" />
-                    Export CSV
-                  </Button>
-                </div>
-              </div>
-
-              {/* Lead grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {visibleLeads.map((lead, i) => (
-                  <LeadCard
-                    key={lead.id}
-                    lead={lead}
-                    index={i}
-                    isLocked={false}
-                    onOutreach={setSelectedLead}
-                  />
-                ))}
-                {lockedLeads.slice(0, 4).map((lead, i) => (
-                  <LeadCard
-                    key={lead.id}
-                    lead={lead}
-                    index={visibleLeads.length + i}
-                    isLocked={true}
-                    onOutreach={() => {}}
-                  />
-                ))}
-              </div>
-
-              {/* Paywall */}
-              {!isPremium && lockedLeads.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
-                  className="relative mt-4 p-8 rounded-xl bg-card glass-border text-center"
-                >
-                  <div className="absolute inset-0 rounded-xl backdrop-blur-[1px]" />
-                  <div className="relative z-10">
-                    <Lock className="w-8 h-8 text-primary mx-auto mb-3" />
-                    <h3 className="text-lg font-bold text-foreground mb-2">
-                      You found {FREE_LIMIT} leads. There are {totalFound - FREE_LIMIT} more.
-                    </h3>
-                    <p className="text-muted-foreground text-sm mb-5">
-                      Unlock the full list for just $5
-                    </p>
-                    <Button variant="premium" size="lg" onClick={handleUnlock}>
-                      <Lock className="w-4 h-4" />
-                      Unlock {totalFound - FREE_LIMIT} More Leads — $5
-                    </Button>
+              ) : leads.length > 0 && (
+                <>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-xl font-bold text-foreground">
+                        Found <span className="text-primary font-mono-data">{totalFound}</span> Real Leads
+                      </h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {isPremium ? "All leads unlocked" : `Showing ${Math.min(FREE_LIMIT, totalFound)} of ${totalFound} leads`}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={handleCopyAll}>
+                        <Copy className="w-3.5 h-3.5" />
+                        Copy All
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleExportCSV}>
+                        <Download className="w-3.5 h-3.5" />
+                        Export CSV
+                      </Button>
+                    </div>
                   </div>
-                </motion.div>
-              )}
 
-              {/* Bottom Ad */}
-              <div className="mt-10 h-[90px] rounded-lg bg-secondary/50 glass-border flex items-center justify-center">
-                <span className="micro-label text-muted-foreground/50">Sponsored</span>
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {visibleLeads.map((lead, i) => (
+                      <LeadCard
+                        key={lead.id}
+                        lead={lead}
+                        index={i}
+                        isLocked={false}
+                        onOutreach={setSelectedLead}
+                        onEnrich={handleEnrich}
+                        isEnriching={enrichingIds.has(lead.id)}
+                      />
+                    ))}
+                    {lockedLeads.slice(0, 4).map((lead, i) => (
+                      <LeadCard
+                        key={lead.id}
+                        lead={lead}
+                        index={visibleLeads.length + i}
+                        isLocked={true}
+                        onOutreach={() => {}}
+                      />
+                    ))}
+                  </div>
+
+                  {!isPremium && lockedLeads.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5 }}
+                      className="relative mt-4 p-8 rounded-xl bg-card glass-border text-center"
+                    >
+                      <div className="relative z-10">
+                        <Lock className="w-8 h-8 text-primary mx-auto mb-3" />
+                        <h3 className="text-lg font-bold text-foreground mb-2">
+                          {totalFound - FREE_LIMIT} more real leads available
+                        </h3>
+                        <p className="text-muted-foreground text-sm mb-5">
+                          Unlock the full list for just $5
+                        </p>
+                        <Button variant="premium" size="lg" onClick={handleUnlock}>
+                          <Lock className="w-4 h-4" />
+                          Unlock {totalFound - FREE_LIMIT} More Leads — $5
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <div className="mt-10 h-[90px] rounded-lg bg-secondary/50 glass-border flex items-center justify-center">
+                    <span className="micro-label text-muted-foreground/50">Sponsored</span>
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-secondary py-8 mt-12">
         <div className="container text-center">
           <p className="text-sm text-muted-foreground">Cartory Lead Orbit — AI Powered Lead Discovery</p>
@@ -201,7 +232,6 @@ const Index = () => {
         </div>
       </footer>
 
-      {/* Outreach Panel */}
       {selectedLead && (
         <OutreachPanel
           lead={selectedLead}
