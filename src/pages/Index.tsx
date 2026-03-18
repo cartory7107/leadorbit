@@ -251,6 +251,7 @@ const Index = () => {
         <div className="container text-center">
           <p className="text-sm text-muted-foreground">Cartory Lead Orbit — AI Powered Lead Discovery</p>
           <div className="flex items-center justify-center gap-4 mt-3">
+            <Link to="/about" className="text-xs text-muted-foreground hover:text-primary transition-colors">👤 Who Built This?</Link>
             <a href="#" className="text-xs text-muted-foreground hover:text-primary transition-colors">Privacy Policy</a>
             <a href="#" className="text-xs text-muted-foreground hover:text-primary transition-colors">Terms</a>
           </div>
