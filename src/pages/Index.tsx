@@ -9,6 +9,7 @@ import LeadCardSkeleton from "@/components/LeadCardSkeleton";
 import OutreachPanel from "@/components/OutreachPanel";
 import { searchLeads, enrichLead, leadsToCSV, type Lead } from "@/lib/leadGenerator";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 import logoImage from "@/assets/logo.png";
 
 const FREE_LIMIT = 10;
