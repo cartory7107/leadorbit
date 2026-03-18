@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Lock, Copy, AlertCircle } from "lucide-react";
+import { Download, Lock, Copy, AlertCircle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HeroSection from "@/components/HeroSection";
 import LeadSearch from "@/components/LeadSearch";
@@ -9,6 +9,7 @@ import LeadCardSkeleton from "@/components/LeadCardSkeleton";
 import OutreachPanel from "@/components/OutreachPanel";
 import { searchLeads, enrichLead, leadsToCSV, type Lead } from "@/lib/leadGenerator";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 import logoImage from "@/assets/logo.png";
 
 const FREE_LIMIT = 10;
@@ -116,7 +117,14 @@ const Index = () => {
             <img src={logoImage} alt="Cartory Lead Orbit" className="w-8 h-8 rounded-lg object-contain" />
             <span className="font-semibold text-foreground text-sm">Cartory Lead Orbit</span>
           </div>
-          <div className="micro-label">part of cartory (GOC)</div>
+          <div className="flex items-center gap-4">
+            <div className="micro-label hidden sm:block">part of cartory (GOC)</div>
+            <Link to="/about" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors">
+              <User className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Who Built This?</span>
+              <span className="sm:hidden">👤</span>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -243,6 +251,7 @@ const Index = () => {
         <div className="container text-center">
           <p className="text-sm text-muted-foreground">Cartory Lead Orbit — AI Powered Lead Discovery</p>
           <div className="flex items-center justify-center gap-4 mt-3">
+            <Link to="/about" className="text-xs text-muted-foreground hover:text-primary transition-colors">👤 Who Built This?</Link>
             <a href="#" className="text-xs text-muted-foreground hover:text-primary transition-colors">Privacy Policy</a>
             <a href="#" className="text-xs text-muted-foreground hover:text-primary transition-colors">Terms</a>
           </div>
