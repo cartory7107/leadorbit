@@ -117,7 +117,14 @@ const Index = () => {
             <img src={logoImage} alt="Cartory Lead Orbit" className="w-8 h-8 rounded-lg object-contain" />
             <span className="font-semibold text-foreground text-sm">Cartory Lead Orbit</span>
           </div>
-          <div className="micro-label">part of cartory (GOC)</div>
+          <div className="flex items-center gap-4">
+            <div className="micro-label hidden sm:block">part of cartory (GOC)</div>
+            <Link to="/about" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors">
+              <User className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Who Built This?</span>
+              <span className="sm:hidden">👤</span>
+            </Link>
+          </div>
         </div>
       </header>
 
