@@ -141,6 +141,7 @@ const About = () => {
               >
                 <MessageCircle className="w-8 h-8 text-accent mb-3" />
                 <h3 className="font-semibold text-foreground text-sm mb-1">WhatsApp</h3>
+                <p className="text-muted-foreground text-sm mb-1">01843253599</p>
                 <p className="text-muted-foreground text-sm mb-3">Chat with me directly</p>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent-foreground bg-accent/20 border border-accent/30 rounded-full px-3 py-1">
                   Chat on WhatsApp
